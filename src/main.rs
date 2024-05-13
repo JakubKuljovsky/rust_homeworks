@@ -27,8 +27,6 @@ fn csv(text: String) -> Result<String, Box<dyn Error>> {
     let rows: Vec<&str> = text.split("\n").collect();
     
  
-
-    println!(" rows: {}", rows[0]);
     if rows.len() > 1 {
         return Err("No data provided".into());
     }
@@ -74,7 +72,6 @@ fn csv(text: String) -> Result<String, Box<dyn Error>> {
     let mut table = String::new();
 
     
-    // Format the head vector
     for (i, field) in head.iter().enumerate() {
         table.push_str(field);
         if i < max_cells_row - 1 {
@@ -83,7 +80,6 @@ fn csv(text: String) -> Result<String, Box<dyn Error>> {
     }
     table.push_str("\n");
 
-    // Format the cells vector
     for row in &cells_str {
         for (i, field) in row.iter().enumerate() {
             table.push_str(field);
@@ -99,7 +95,6 @@ fn csv(text: String) -> Result<String, Box<dyn Error>> {
 
 fn reverse(text: String) -> Result<String, Box<dyn Error>>
 {
-    // todo
     Ok(text.split(|c: char| c.is_whitespace()  && c != '\n'  && c != '\t')
          .filter(|s| !s.is_empty())
          .rev()
