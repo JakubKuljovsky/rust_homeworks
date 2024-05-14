@@ -27,7 +27,7 @@ fn csv(text: String) -> Result<String, Box<dyn Error>> {
     let rows: Vec<&str> = text.split("\n").collect();
     
  
-    if rows.len() > 1 {
+    if rows.len() < 1 {
         return Err("No data provided".into());
     }
 
