@@ -1,97 +1,20 @@
 use std::io;
-use english_numbers::convert_all_fmt;
-use std::env;
-use std::error::Error;
 use std::io::{BufRead, BufReader};
+use std::sync::mpsc;
+use std::thread;
+use std::process;
+use std::error::Error;
+use prettytable::Table;
+use english_numbers::convert_all_fmt;
 use slugify::slugify;
+use std::env;
 
-fn read_from_input() -> Result<String, Box<dyn Error>>
-{
-    let mut reader = BufReader::new(io::stdin().lock());
-    let mut input = String::new();
-
-    loop {
-        let mut line = String::new();
-        let bytes_read = reader.read_line(&mut line)?;
-
-        if bytes_read == 0 || line.trim().is_empty() {
-            break;
-        }
-
-        input.push_str(&line);
-    }
-    Ok(input)
-}
 
 fn csv(text: String) -> Result<String, Box<dyn Error>> {
-    let rows: Vec<&str> = text.split("\n").collect();
-    
- 
-    if rows.len() > 1 {
-        return Err("No data provided".into());
-    }
-
-    let mut head: Vec<&str> = rows[0].split(',').collect();
-    let mut cells: Vec<Vec<&str>> = rows[1..].iter().map(|row| row.split(',').collect()).collect();
-
-    let mut max_cells_row = head.len();
-
-    for i in 0..cells.len() - 1 {
-        if cells[i].len() > max_cells_row{
-            max_cells_row = cells[i].len();
-        }
-    }
-
-    while head.len() < max_cells_row{
-        head.push(" ");
-    }
-
-    for i in 0..cells.len() - 1 {
-        while cells[i].len() < max_cells_row{
-            cells[i].push(" ");
-        }
-    }
-
-    let mut cells_str: Vec<Vec<String>> = cells.iter().map(|row| row.iter().map(|cell| cell.to_string()).collect()).collect();
-    for i in 0..cells.len() - 1{
-        let mut max_in_column = 0;
-        for j in 0..max_cells_row - 1{
-            if max_in_column < cells[i][j].len() {
-                max_in_column = cells[i][j].len();
-            }
-        }
-
-
-        for j in 0..max_cells_row - 1{
-            while cells[i][j].len() < max_cells_row {
-                cells_str[i][j] += " ";
-            }
-        }
-    }
-
-    let mut table = String::new();
-
-    
-    for (i, field) in head.iter().enumerate() {
-        table.push_str(field);
-        if i < max_cells_row - 1 {
-            table.push_str(" * ");
-        }
-    }
-    table.push_str("\n");
-
-    for row in &cells_str {
-        for (i, field) in row.iter().enumerate() {
-            table.push_str(field);
-            if i < max_cells_row - 1 {
-                table.push_str(" * ");
-            }
-        }
-        table.push_str("\n");
-    }
-    
-    Ok(table)
+    let table = Table::from_csv_file(text)?;
+    Ok(table.to_string())
 }
+
 
 fn reverse(text: String) -> Result<String, Box<dyn Error>>
 {
@@ -134,27 +57,66 @@ fn slugify_text(text: String) -> Result<String, Box<dyn Error>>
 
 fn no_space(text: String) -> Result<String, Box<dyn Error>>
 {
-    Ok(slugify!(&text, separator = ""))
+    let no_space_string: String = text.split(|c: char| c.is_whitespace()).collect::<Vec<&str>>().join("");
+    Ok(no_space_string)
 }
 
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
+fn read_from_input(sender: mpsc::Sender<String>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut reader = BufReader::new(io::stdin().lock());
 
-        let mut text = String::new();
-        match read_from_input()
-        {
-            Ok(input) => {
-                text += &input;
-            }
-            Err(error) => {
-                eprintln!("Error in reading lines: {}", error);
-                return;
-            }
+
+    loop {
+        let mut line = String::new();
+        let bytes_read = reader.read_line(&mut line)?;
+
+        if bytes_read == 0 || line.trim().is_empty() {
+            break;
         }
 
-        let final_string = match args[1].as_str() {
+        sender.send(line.trim().to_string())?;
+    }
+
+    Ok(())
+}
+
+fn process_input(text: String) {
+    let mut iter = text.splitn(2, ' ');
+    let command = if let Some(cmd) = iter.next() {
+        cmd
+    } else {
+        eprintln!("Error: Expected command");
+        return;
+    };
+
+    let input = if let Some(inp) = iter.next() {
+        inp.to_string()
+    } else {
+        eprintln!("Error: Expected input");
+        return;
+    };
+
+    let number: u32 = match command.trim().parse() {
+        Ok(num) => num,
+        Err(_) => 0,
+    };
+
+    let final_string : Result<String, Box<dyn Error>>;
+
+    if number > 0 {
+        final_string = match number {
+            1 => csv(input),
+            2 => reverse(input),
+            3 => convert_numbers_to_words(input),
+            4 => lowercase(input),
+            5 => uppercase(input),
+            6 => slugify_text(input),
+            7 => no_space(input),
+            _ => Ok(input)
+        };
+    }
+    else {
+        final_string = match command {
             "csv" => csv(text),
             "reverse" => reverse(text),
             "convert-numbers-to-words" => convert_numbers_to_words(text),
@@ -162,19 +124,61 @@ fn main() {
             "uppercase" => uppercase(text),
             "slugify" => slugify_text(text),
             "no-spaces" => no_space(text),
-            _ => { Err("Invalid argument".into()) }
+            _ => Ok(input)
         };
+    }
 
-        match final_string {
-            Ok(text) => {
-                println!("{}", text);
-            }
-            Err(error) => {
-                eprintln!("Error : {}", error);
-                return;
-            }
+    match final_string {
+        Ok(text) => {
+            println!("{}", text);
+        }
+        Err(error) => {
+            eprintln!("Error : {}", error);
+            process::exit(1);
         }
     }
 }
 
+fn main() {
+    let mut args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+    let (tx, rx) = mpsc::channel();
 
+    let read_handle = thread::spawn(move || {
+        match read_from_input(tx) {
+            Err(error) => {
+                eprintln!("{}", error);
+                process::exit(1);
+            }
+            Ok(_) => {} 
+        }
+    });
+
+    let process_handle = thread::spawn(move || {
+        loop {
+            match rx.try_recv() {
+                Ok(input) => {
+                    process_input(input);
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    break;
+                }
+            }
+        }
+        let input = rx.recv().unwrap();
+        process_input(input);
+    });
+
+    read_handle.join().unwrap();
+    process_handle.join().unwrap();
+}
+else {
+    process_input(args[1..].join(" "));
+}
+
+
+
+}
