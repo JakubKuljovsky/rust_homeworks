@@ -140,7 +140,7 @@ fn process_input(text: String) {
 }
 
 fn main() {
-    let mut args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
     let (tx, rx) = mpsc::channel();
 
